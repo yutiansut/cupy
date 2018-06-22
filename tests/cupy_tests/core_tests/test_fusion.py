@@ -1417,3 +1417,101 @@ class TestFusionPythonConstant(unittest.TestCase):
         def f(x):
             return x * dtype(1)
         return f(testing.shaped_arange((1,), xp, dtype))
+
+
+@testing.gpu
+class TestFusionReturnsConstantValue(unittest.TestCase):
+
+    @testing.for_all_dtypes()
+    @testing.numpy_cupy_array_equal()
+    def test_pass(self, xp, dtype):
+
+        @cupy.fuse()
+        def f(x):
+            pass
+
+        x = testing.shaped_arange((3, 3), xp, dtype)
+        y = f(x)
+        self.assertEqual(y, None)
+        return x
+
+    @testing.for_all_dtypes(no_bool=True)
+    @testing.numpy_cupy_array_equal()
+    def test_no_retval(self, xp, dtype):
+
+        @cupy.fuse()
+        def f(x):
+            x += 1
+
+        x = testing.shaped_arange((3, 3), xp, dtype)
+        y = f(x)
+        self.assertEqual(y, None)
+        return x
+
+
+@testing.gpu
+class TestFusionReturnsTuple(unittest.TestCase):
+
+    @testing.for_all_dtypes()
+    @testing.numpy_cupy_array_list_equal()
+    def test_empty_tuple(self, xp, dtype):
+
+        @cupy.fuse()
+        def f(x):
+            return ()
+
+        x = testing.shaped_arange((3, 4), xp, dtype)
+        y = f(x)
+        self.assertEqual(type(y), tuple)
+        return y
+
+    @testing.for_all_dtypes()
+    @testing.numpy_cupy_array_list_equal()
+    def test_singleton_tuple(self, xp, dtype):
+
+        @cupy.fuse()
+        def f(x):
+            return x * 2,
+
+        x = testing.shaped_arange((3, 4), xp, dtype)
+        y = f(x)
+        self.assertEqual(type(y), tuple)
+        return y
+
+    @testing.for_all_dtypes()
+    @testing.numpy_cupy_array_list_equal()
+    def test_pair_tuple(self, xp, dtype):
+
+        @cupy.fuse()
+        def f(x):
+            return x * 2, x * 3
+
+        x = testing.shaped_arange((3, 4), xp, dtype)
+        y = f(x)
+        self.assertEqual(type(y), tuple)
+        return y
+
+
+class TestFusionComposition(unittest.TestCase):
+
+    @testing.for_all_dtypes(no_bool=True)
+    @testing.numpy_cupy_array_equal()
+    def test_composition(self, xp, dtype):
+        @cupy.fuse()
+        def f(x, y):
+            return x - y * 2, x + y
+
+        @cupy.fuse()
+        def g(x, y, z):
+            a, b = f(x + z, z - x * 3)
+            c, d = f(x - y, y - z)
+            return a + b * c - d
+
+        @cupy.fuse()
+        def h(x, y):
+            a, b = f(x + y * 2, y * 3)
+            return a - b * g(x - 2, x - 3, -y)
+
+        x = testing.shaped_arange((3, 3), xp, dtype)
+        y = testing.shaped_arange((3, 3), xp, dtype)
+        return h(x, y)
